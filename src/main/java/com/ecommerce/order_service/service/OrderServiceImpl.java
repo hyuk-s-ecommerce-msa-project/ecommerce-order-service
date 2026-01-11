@@ -7,10 +7,10 @@ import com.ecommerce.order_service.repository.OrderRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
-import org.modelmapper.convention.MatchingStrategies;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
 
@@ -23,7 +23,10 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public OrderDto createOrder(OrderDto orderDto) {
-        String orderId = UUID.randomUUID().toString();
+        String datePrefix = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        String randomSuffix = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+
+        String orderId = datePrefix + "-ORDER-" + randomSuffix;
 
         List<OrderItemEntity> items = orderDto.getOrderItems().stream()
                 .map(itemDto -> {
