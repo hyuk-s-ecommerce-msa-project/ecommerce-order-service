@@ -41,7 +41,7 @@ public class OrderEntity {
 
     @CreatedDate
     @Column(nullable = false, updatable = false)
-    private LocalDateTime createdDate;
+    private LocalDateTime createdAt;
 
     public static OrderEntity create(String orderId, String userId, Integer usedPoint, List<OrderItemEntity> items) {
         OrderEntity order = new OrderEntity();
