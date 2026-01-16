@@ -1,5 +1,6 @@
 package com.ecommerce.order_service.dto;
 
+import com.ecommerce.order_service.entity.enums.OrderStatus;
 import lombok.Data;
 
 import java.util.List;
@@ -12,5 +13,6 @@ public class OrderDto {
     private String orderId;
     private String userId;
     private Integer usedPoint;
+    private OrderStatus orderStatus;
     private List<OrderItemsDto> orderItems;
 }

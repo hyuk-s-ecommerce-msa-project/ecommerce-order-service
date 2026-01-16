@@ -15,6 +15,7 @@ public class ResponseOrder {
     private Integer totalAmount;
     private Integer payAmount;
     private Integer usedPoint;
+    private String orderStatus;
     private LocalDateTime createdAt;
 
     private List<ResponseOrderItem> orderItems;

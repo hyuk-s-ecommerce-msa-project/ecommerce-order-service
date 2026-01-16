@@ -1,5 +1,7 @@
 package com.ecommerce.order_service.entity;
 
+import com.ecommerce.order_service.entity.enums.OrderStatus;
+import com.ecommerce.order_service.exception.InvalidOrderException;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -36,6 +38,9 @@ public class OrderEntity {
     @Column(nullable = false)
     private Integer payAmount; // 실 결제 금액
 
+    @Enumerated(EnumType.STRING)
+    private OrderStatus orderStatus;
+
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL)
     private List<OrderItemEntity> orderItems = new ArrayList<>();
 
@@ -57,9 +62,34 @@ public class OrderEntity {
         }
 
         order.totalAmount = totalAmount;
+
+        if (totalAmount < usedPoint) {
+            throw new InvalidOrderException("Used points cannot exceed the total amount");
+        }
         order.payAmount = totalAmount - usedPoint;
+        order.orderStatus = OrderStatus.CREATED;
 
         return order;
+    }
+
+    public void markAsPaid() {
+        if (this.orderStatus != OrderStatus.CREATED) {
+            throw new IllegalStateException("Only CREATED orders can be paid");
+        }
+
+        this.orderStatus = OrderStatus.PAID;
+    }
+
+    public void cancel() {
+        if (this.orderStatus == OrderStatus.COMPLETED) {
+            throw new IllegalStateException("Cannot cancel a completed order");
+        }
+
+        this.orderStatus = OrderStatus.CANCELED;
+    }
+
+    public void complete() {
+        this.orderStatus = OrderStatus.COMPLETED;
     }
 
     private void addOrderItem(OrderItemEntity item) {

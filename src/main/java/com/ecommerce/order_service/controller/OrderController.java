@@ -33,7 +33,7 @@ public class OrderController {
                 env.getProperty("server.port"));
     }
 
-    @PostMapping("/{userId}/orders")
+    @PostMapping("/orders/{userId}")
     public ResponseEntity<ResponseOrder> createOrder(@PathVariable String userId, @RequestBody RequestOrder requestOrder) {
         log.info("Before add orders data");
 
@@ -48,10 +48,9 @@ public class OrderController {
         return ResponseEntity.status(HttpStatus.CREATED).body(responseOrder);
     }
 
-    @GetMapping("/{userId}/orders")
+    @GetMapping("/orders/{userId}")
     public ResponseEntity<List<ResponseOrder>> getOrder(@PathVariable String userId) throws Exception {
-        log.info("Before retrieve orders data");
-        Iterable<OrderEntity> orderList = orderService.getOrdersByUserId(userId);
+        List<OrderDto> orderList = orderService.getOrdersByUserId(userId);
 
         List<ResponseOrder> result = new ArrayList<>();
         orderList.forEach(order -> {
@@ -61,5 +60,42 @@ public class OrderController {
         log.info("After retrieved orders data");
 
         return ResponseEntity.status(HttpStatus.OK).body(result);
+    }
+
+    @GetMapping("/orders/{orderId}/list")
+    public ResponseEntity<ResponseOrder> getOrderByOrderId(@PathVariable String orderId) {
+        OrderDto orderDto = orderService.getOrderByOrderId(orderId);
+        ResponseOrder responseOrder = modelMapper.map(orderDto, ResponseOrder.class);
+
+        return ResponseEntity.status(HttpStatus.OK).body(responseOrder);
+    }
+
+    @PutMapping("/orders/{orderId}/cancel")
+    public ResponseEntity<ResponseOrder> cancelOrder(@PathVariable String orderId) {
+        log.info("Cancelling order id {}", orderId);
+
+        OrderDto canceledOrder = orderService.cancelOrder(orderId);
+
+        ResponseOrder responseOrder = modelMapper.map(canceledOrder, ResponseOrder.class);
+
+        return ResponseEntity.status(HttpStatus.NO_CONTENT).body(responseOrder);
+    }
+
+    @PatchMapping("/orders/{orderId}/payment")
+    public ResponseEntity<ResponseOrder> updatePaymentStatus(@PathVariable String orderId) {
+        OrderDto updatedOrder = orderService.completePayment(orderId);
+
+        ResponseOrder response = modelMapper.map(updatedOrder, ResponseOrder.class);
+
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+
+    @PatchMapping("/orders/{orderId}/complete")
+    public ResponseEntity<ResponseOrder> updateCompletePaymentStatus(@PathVariable String orderId) {
+        OrderDto updatedOrder = orderService.completeOrder(orderId);
+
+        ResponseOrder response = modelMapper.map(updatedOrder, ResponseOrder.class);
+
+        return ResponseEntity.status(HttpStatus.OK).body(response);
     }
 }
