@@ -4,13 +4,16 @@ import com.ecommerce.order_service.dto.CartDto;
 import com.ecommerce.order_service.entity.CartCategory;
 import com.ecommerce.order_service.entity.CartEntity;
 import com.ecommerce.order_service.entity.CartGenre;
+import com.ecommerce.order_service.exception.CartExistingException;
 import com.ecommerce.order_service.exception.CartNotFoundException;
 import com.ecommerce.order_service.exception.UserNotFoundException;
 import com.ecommerce.order_service.repository.CartRepository;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -21,7 +24,14 @@ public class CartServiceImpl implements CartService {
     private final ModelMapper modelMapper;
 
     @Override
+    @Transactional
     public CartDto addToCart(CartDto cartDto) {
+        CartEntity existingCartEntity = cartRepository.findByUserIdAndProductId(cartDto.getUserId(), cartDto.getProductId());
+
+        if (existingCartEntity != null) {
+            throw new CartExistingException("Already in cart");
+        }
+
         String cartId = "Cart" + UUID.randomUUID().toString();
 
         CartEntity cart = CartEntity.create(
@@ -55,8 +65,8 @@ public class CartServiceImpl implements CartService {
     }
 
     @Override
-    public CartDto getCart(String userId) {
-        CartEntity cartEntity = cartRepository.findByUserId(userId);
+    public List<CartDto> getCart(String userId) {
+        List<CartEntity> cartEntity = cartRepository.findByUserId(userId);
 
         if (cartEntity == null) {
             throw new UserNotFoundException("User does not exist");
@@ -76,12 +86,14 @@ public class CartServiceImpl implements CartService {
         cartRepository.deleteById(cartEntity.getId());
     }
 
-    private CartDto convertEntityToCartDto(CartEntity cartEntity) {
-        CartDto cartDto = modelMapper.map(cartEntity, CartDto.class);
+    private List<CartDto> convertEntityToCartDto(List<CartEntity> cartEntity) {
+        return cartEntity.stream().map(entity -> {
+                CartDto cartDto = modelMapper.map(entity, CartDto.class);
 
-        cartDto.setCategories(cartEntity.getCategories().stream().map(CartCategory::getCategoryName).toList());
-        cartDto.setGenres(cartEntity.getGenres().stream().map(CartGenre::getGenre).toList());
+                cartDto.setCategories(entity.getCategories().stream().map(CartCategory::getCategoryName).toList());
+                cartDto.setGenres(entity.getGenres().stream().map(CartGenre::getGenre).toList());
 
-        return cartDto;
+                return cartDto;
+            }).toList();
     }
 }

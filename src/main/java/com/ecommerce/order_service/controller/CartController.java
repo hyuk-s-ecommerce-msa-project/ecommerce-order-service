@@ -4,6 +4,7 @@ import com.ecommerce.order_service.dto.CartDto;
 import com.ecommerce.order_service.service.CartService;
 import com.ecommerce.order_service.vo.RequestCart;
 import com.ecommerce.order_service.vo.ResponseCart;
+import com.ecommerce.order_service.vo.ResponseCartList;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.http.HttpStatus;
@@ -37,9 +38,16 @@ public class CartController {
     }
 
     @GetMapping("/cart/{userId}")
-    public ResponseEntity<ResponseCart> getCart(@PathVariable String userId) {
-        CartDto cartDto = cartService.getCart(userId);
-        ResponseCart response = modelMapper.map(cartDto, ResponseCart.class);
+    public ResponseEntity<ResponseCartList> getCart(@PathVariable String userId) {
+        List<CartDto> cartDto = cartService.getCart(userId);
+
+        List<ResponseCart> items = cartDto.stream().map(dto -> modelMapper.map(dto, ResponseCart.class)).toList();
+
+        int totalPrice = items.stream().mapToInt(ResponseCart::getPrice).sum();
+
+        ResponseCartList response = new ResponseCartList();
+        response.setCartList(items);
+        response.setTotalPrice(totalPrice);
 
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
