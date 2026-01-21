@@ -7,10 +7,10 @@ import java.util.List;
 
 
 public interface OrderService {
-    OrderDto createOrder(OrderDto orderDto);
-    OrderDto getOrderByOrderId(String orderId);
+    OrderDto createOrder(OrderDto orderDto, String userId);
+    OrderDto getOrderByOrderId(String orderId, String userId);
     List<OrderDto> getOrdersByUserId(String userId);
-    OrderDto cancelOrder(String orderId);
-    OrderDto completePayment(String orderId);
-    OrderDto completeOrder(String orderId);
+    OrderDto cancelOrder(String orderId, String userId);
+    OrderDto completePayment(String orderId, String userId);
+    OrderDto completeOrder(String orderId, String userId);
 }

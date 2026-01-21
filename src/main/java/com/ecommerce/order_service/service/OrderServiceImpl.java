@@ -27,11 +27,15 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
-    public OrderDto cancelOrder(String orderId) {
+    public OrderDto cancelOrder(String orderId, String userId) {
         OrderEntity orderEntity = orderRepository.findByOrderId(orderId);
 
         if (orderEntity == null) {
             throw new OrderNotFoundException("Cannot find order");
+        }
+
+        if (!orderEntity.getUserId().equals(userId)) {
+            throw new RuntimeException("You do not have permission for this order.");
         }
 
         if (orderEntity.getOrderStatus() == OrderStatus.CANCELED || orderEntity.getOrderStatus() == OrderStatus.COMPLETED) {
@@ -51,11 +55,11 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
-    public OrderDto completePayment(String orderId) {
+    public OrderDto completePayment(String orderId, String userId) {
         OrderEntity orderEntity = orderRepository.findByOrderId(orderId);
 
-        if (orderEntity == null) {
-            throw new OrderNotFoundException("Cannot find order");
+        if (orderEntity == null || !orderEntity.getUserId().equals(userId)) {
+            throw new OrderNotFoundException("Cannot find order or You do not have permission for this order");
         }
 
         orderEntity.markAsPaid();
@@ -65,11 +69,11 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
-    public OrderDto completeOrder(String orderId) {
+    public OrderDto completeOrder(String orderId, String userId) {
         OrderEntity orderEntity = orderRepository.findByOrderId(orderId);
 
-        if (orderEntity == null) {
-            throw new OrderNotFoundException("Cannot find order");
+        if (orderEntity == null ||!orderEntity.getUserId().equals(userId)) {
+            throw new OrderNotFoundException("Cannot find order or You do not have permission for this order");
         }
 
         orderEntity.complete();
@@ -79,7 +83,7 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
-    public OrderDto createOrder(OrderDto orderDto) {
+    public OrderDto createOrder(OrderDto orderDto, String userId) {
         String datePrefix = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         String randomSuffix = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
@@ -101,19 +105,27 @@ public class OrderServiceImpl implements OrderService {
 
         OrderEntity orderEntity = OrderEntity.create(
                 orderId,
-                orderDto.getUserId(),
+                userId,
                 orderDto.getUsedPoint() != null ? orderDto.getUsedPoint() : 0,
                 items
         );
 
         orderRepository.save(orderEntity);
 
-        return modelMapper.map(orderEntity, OrderDto.class);
+        OrderDto result = modelMapper.map(orderEntity, OrderDto.class);
+        result.setUserId(userId);
+
+        return result;
     }
 
     @Override
-    public OrderDto getOrderByOrderId(String orderId) {
+    @Transactional
+    public OrderDto getOrderByOrderId(String orderId, String userId) {
         OrderEntity orderEntity = orderRepository.findByOrderId(orderId);
+
+        if (orderEntity == null || !orderEntity.getUserId().equals(userId)) {
+            throw new OrderNotFoundException("Order not found or access denied");
+        }
 
         return modelMapper.map(orderEntity, OrderDto.class);
     }
@@ -123,15 +135,15 @@ public class OrderServiceImpl implements OrderService {
         List<OrderEntity> orderEntities = orderRepository.findByUserId(userId);
 
         if (orderEntities == null || orderEntities.isEmpty()) {
-            throw new OrderNotFoundException("No orders found for this user");
+            return new ArrayList<>();
         }
 
-        List<OrderDto> result = new ArrayList<>();
-
-        orderEntities.forEach(orderEntity -> {
-            result.add(modelMapper.map(orderEntity, OrderDto.class));
-        });
-
-        return result;
+        return orderEntities.stream()
+                .map(entity -> {
+                    OrderDto dto = modelMapper.map(entity, OrderDto.class);
+                    dto.setUserId(userId);
+                    return dto;
+                })
+                .toList();
     }
 }

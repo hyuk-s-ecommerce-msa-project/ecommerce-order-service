@@ -31,8 +31,8 @@ public class CartServiceImpl implements CartService {
 
     @Override
     @Transactional
-    public CartDto addToCart(CartDto cartDto) {
-        CartEntity existingCartEntity = cartRepository.findByUserIdAndProductId(cartDto.getUserId(), cartDto.getProductId());
+    public CartDto addToCart(CartDto cartDto, String userId) {
+        CartEntity existingCartEntity = cartRepository.findByUserIdAndProductId(userId, cartDto.getProductId());
 
         if (existingCartEntity != null) {
             throw new CartExistingException("Already in cart");
@@ -46,7 +46,7 @@ public class CartServiceImpl implements CartService {
                 cartDto.getProductName(),
                 cartDto.getPrice(),
                 cartDto.getThumbnailUrl(),
-                cartDto.getUserId(),
+                userId,
                 cartDto.getProductId()
         );
 
@@ -125,11 +125,11 @@ public class CartServiceImpl implements CartService {
 
     @Override
     @Transactional
-    public void deleteCartItem(String cartId) {
+    public void deleteCartItem(String cartId, String userId) {
         CartEntity cartEntity = cartRepository.findByCartId(cartId);
 
-        if (cartEntity == null) {
-            throw new CartNotFoundException("Cart Item not found");
+        if (cartEntity == null || !cartEntity.getUserId().equals(userId)) {
+            throw new CartNotFoundException("Cart Item not found or You don't have permission to delete this cart");
         }
 
         cartRepository.deleteById(cartEntity.getId());
