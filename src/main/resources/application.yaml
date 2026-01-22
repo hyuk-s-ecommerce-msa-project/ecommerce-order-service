@@ -4,6 +4,12 @@ server:
 spring:
   application:
     name: order-service
+  cloud:
+    config:
+      name: gameinfo
+  config:
+    import:
+      - "optional:configserver:http://localhost:8888"
   data:
     redis:
       host: localhost
