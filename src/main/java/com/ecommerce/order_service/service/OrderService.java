@@ -11,6 +11,5 @@ public interface OrderService {
     OrderDto getOrderByOrderId(String orderId, String userId);
     List<OrderDto> getOrdersByUserId(String userId);
     OrderDto cancelOrder(String orderId, String userId);
-    OrderDto completePayment(String orderId, String userId);
     OrderDto completeOrder(String orderId, String userId);
 }

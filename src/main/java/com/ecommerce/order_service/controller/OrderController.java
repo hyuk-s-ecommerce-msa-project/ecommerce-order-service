@@ -35,14 +35,10 @@ public class OrderController {
 
     @PostMapping("/orders")
     public ResponseEntity<ResponseOrder> createOrder(@RequestHeader("userId") String userId, @RequestBody RequestOrder requestOrder) {
-        log.info("Before add orders data");
-
         OrderDto orderDto = modelMapper.map(requestOrder, OrderDto.class);
 
         OrderDto createOrderDto = orderService.createOrder(orderDto, userId);
         ResponseOrder responseOrder = modelMapper.map(createOrderDto, ResponseOrder.class);
-
-        log.info("After added orders data");
 
         return ResponseEntity.status(HttpStatus.CREATED).body(responseOrder);
     }
@@ -77,16 +73,7 @@ public class OrderController {
         return ResponseEntity.status(HttpStatus.NO_CONTENT).body(responseOrder);
     }
 
-    @PatchMapping("/orders/{orderId}/payment")
-    public ResponseEntity<ResponseOrder> updatePaymentStatus(@PathVariable String orderId, @RequestHeader("userId") String userId) {
-        OrderDto updatedOrder = orderService.completePayment(orderId, userId);
-
-        ResponseOrder response = modelMapper.map(updatedOrder, ResponseOrder.class);
-
-        return ResponseEntity.status(HttpStatus.OK).body(response);
-    }
-
-    @PatchMapping("/orders/{orderId}/complete")
+    @PostMapping("/orders/{orderId}/complete")
     public ResponseEntity<ResponseOrder> updateCompletePaymentStatus(@PathVariable String orderId, @RequestHeader("userId") String userId) {
         OrderDto updatedOrder = orderService.completeOrder(orderId, userId);
 

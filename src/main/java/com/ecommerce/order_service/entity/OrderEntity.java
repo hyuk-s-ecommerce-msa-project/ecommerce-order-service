@@ -56,6 +56,7 @@ public class OrderEntity {
         order.usedPoint = usedPoint;
 
         int totalAmount = 0;
+
         for (OrderItemEntity item : items) {
             order.addOrderItem(item);
             totalAmount += item.getUnitPrice();
@@ -70,14 +71,6 @@ public class OrderEntity {
         order.orderStatus = OrderStatus.CREATED;
 
         return order;
-    }
-
-    public void markAsPaid() {
-        if (this.orderStatus != OrderStatus.CREATED) {
-            throw new IllegalStateException("Only CREATED orders can be paid");
-        }
-
-        this.orderStatus = OrderStatus.PAID;
     }
 
     public void cancel() {
