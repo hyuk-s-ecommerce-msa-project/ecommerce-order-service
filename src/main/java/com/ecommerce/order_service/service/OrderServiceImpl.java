@@ -57,16 +57,42 @@ public class OrderServiceImpl implements OrderService {
 
         orderEntity.cancel();
 
-        if (orderEntity.getUsedPoint() > 0) {
-            RequestPoint requestPoint = new RequestPoint();
-            requestPoint.setPoint(orderEntity.getUsedPoint());
+        List<String> productIds = orderEntity.getOrderItems().stream().map(OrderItemEntity::getProductId).toList();
 
-            userServiceClient.restorePoints(userId, requestPoint);
+        try {
+            if (orderEntity.getUsedPoint() > 0) {
+                RequestPoint requestPoint = new RequestPoint();
+                requestPoint.setPoint(orderEntity.getUsedPoint());
 
-            log.info("Starting point restoration process, user ID : {}, used point : {}", orderEntity.getUserId(), orderEntity.getUsedPoint());
+                userServiceClient.restorePoints(userId, requestPoint);
+
+                log.info("Starting point restoration process, user ID : {}, used point : {}", orderEntity.getUserId(), orderEntity.getUsedPoint());
+            }
+
+            List<String> restoreIds = catalogServiceClient.increaseStock(productIds);
+
+            if (restoreIds.size() != productIds.size()) {
+                throw new IllegalStateException("Cannot restore stock");
+            }
+
+            RequestKey requestKey = new RequestKey(productIds, orderId);
+            List<ResponseKey> responseKey = keyInventoryClient.revokeKey(requestKey, userId);
+
+            if (responseKey.size() != productIds.size()) {
+                log.warn("Key revocation mismatch: Requested {}, but revoked {}",
+                        productIds.size(), responseKey.size());
+            }
+
+            responseKey.forEach(key ->
+                    log.info("Key revoked - OrderId: {}, ProductId: {}, Key: {}",
+                            orderId, key.getProductId(), key.getGameKey())
+            );
+
+            return modelMapper.map(orderEntity, OrderDto.class);
+        } catch (Exception e) {
+            log.error("Order cancellation failed. Starting compensation... : {}", e.getMessage());
+            throw e;
         }
-
-        return modelMapper.map(orderEntity, OrderDto.class);
     }
 
     @Override
@@ -107,56 +133,67 @@ public class OrderServiceImpl implements OrderService {
 
         List<String> productIds = orderDto.getOrderItems().stream().map(OrderItemsDto::getProductId).toList();
 
-        List<ResponseCatalog> responseCatalogList = catalogServiceClient.getCatalogList(productIds);
+        try {
+            List<String> processedIds = catalogServiceClient.decreaseStock(productIds);
 
-        log.info("catalog list : {}", responseCatalogList);
+            if (productIds.size() != processedIds.size()) {
+                throw new RuntimeException("Insufficient stock for some items");
+            }
 
-        Map<String, ResponseCatalog> catalogMap = responseCatalogList.stream()
-                .collect(Collectors.toMap(ResponseCatalog::getProductId, c -> c));
+            List<ResponseCatalog> responseCatalogList = catalogServiceClient.getCatalogList(productIds);
 
-        RequestKey requestKey = new RequestKey(productIds, orderId);
+            log.info("catalog list : {}", responseCatalogList);
 
-        List<ResponseKey> assignedKeys = keyInventoryClient.assignKeys(requestKey, userId);
+            Map<String, ResponseCatalog> catalogMap = responseCatalogList.stream()
+                    .collect(Collectors.toMap(ResponseCatalog::getProductId, c -> c));
 
-        Map<String, String> keyMap = assignedKeys.stream().collect(Collectors.toMap(ResponseKey::getProductId, ResponseKey::getGameKey));
+            RequestKey requestKey = new RequestKey(productIds, orderId);
 
-        List<OrderItemEntity> items = orderDto.getOrderItems().stream()
-                .map(itemDto -> {
-                    String productId = itemDto.getProductId();
+            List<ResponseKey> assignedKeys = keyInventoryClient.assignKeys(requestKey, userId);
 
-                    ResponseCatalog catalog = catalogMap.get(productId);
+            Map<String, String> keyMap = assignedKeys.stream().collect(Collectors.toMap(ResponseKey::getProductId, ResponseKey::getGameKey));
 
-                    String key = keyMap.get(itemDto.getProductId());
+            List<OrderItemEntity> items = orderDto.getOrderItems().stream()
+                    .map(itemDto -> {
+                        String productId = itemDto.getProductId();
 
-                    if (catalog == null) {
-                        throw new RuntimeException("Cannot find catalog for product id : " + itemDto.getProductId());
-                    }
+                        ResponseCatalog catalog = catalogMap.get(productId);
 
-                    log.info("catalog : {}", catalog);
-                    log.info("realPrice : {}", catalog.getUnitPrice());
+                        String key = keyMap.get(itemDto.getProductId());
 
-                    log.info("Key : {}", key);
+                        if (catalog == null) {
+                            throw new RuntimeException("Cannot find catalog for product id : " + itemDto.getProductId());
+                        }
 
-                    return OrderItemEntity.create(
-                            itemDto.getProductId(),
-                            catalog.getUnitPrice(),
-                            key
-                    );
-                }).toList();
+                        log.info("catalog : {}", catalog);
+                        log.info("realPrice : {}", catalog.getUnitPrice());
 
-        OrderEntity orderEntity = OrderEntity.create(
-                orderId,
-                userId,
-                orderDto.getUsedPoint() != null ? orderDto.getUsedPoint() : 0,
-                items
-        );
+                        log.info("Key : {}", key);
 
-        orderRepository.save(orderEntity);
+                        return OrderItemEntity.create(
+                                itemDto.getProductId(),
+                                catalog.getUnitPrice(),
+                                key
+                        );
+                    }).toList();
 
-        OrderDto result = modelMapper.map(orderEntity, OrderDto.class);
-        result.setUserId(userId);
+            OrderEntity orderEntity = OrderEntity.create(
+                    orderId,
+                    userId,
+                    orderDto.getUsedPoint() != null ? orderDto.getUsedPoint() : 0,
+                    items
+            );
 
-        return result;
+            orderRepository.save(orderEntity);
+
+            OrderDto result = modelMapper.map(orderEntity, OrderDto.class);
+            result.setUserId(userId);
+
+            return result;
+        } catch (Exception e) {
+            log.error("Order creation failed: {}", e.getMessage());
+            throw e;
+        }
     }
 
     @Override
