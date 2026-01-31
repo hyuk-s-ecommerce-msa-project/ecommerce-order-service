@@ -69,7 +69,7 @@ public class OrderServiceImpl implements OrderService {
                 log.info("Starting point restoration process, user ID : {}, used point : {}", orderEntity.getUserId(), orderEntity.getUsedPoint());
             }
 
-            List<String> restoreIds = catalogServiceClient.increaseStock(productIds);
+            List<ResponseCatalog> restoreIds = catalogServiceClient.increaseStock(productIds);
 
             if (restoreIds.size() != productIds.size()) {
                 throw new IllegalStateException("Cannot restore stock");
@@ -133,68 +133,126 @@ public class OrderServiceImpl implements OrderService {
 
         List<String> productIds = orderDto.getOrderItems().stream().map(OrderItemsDto::getProductId).toList();
 
-        try {
-            List<String> processedIds = catalogServiceClient.decreaseStock(productIds);
+        List<ResponseCatalog> processedIds = catalogServiceClient.decreaseStock(productIds);
 
-            if (productIds.size() != processedIds.size()) {
-                throw new RuntimeException("Insufficient stock for some items");
-            }
-
-            List<ResponseCatalog> responseCatalogList = catalogServiceClient.getCatalogList(productIds);
-
-            log.info("catalog list : {}", responseCatalogList);
-
-            Map<String, ResponseCatalog> catalogMap = responseCatalogList.stream()
-                    .collect(Collectors.toMap(ResponseCatalog::getProductId, c -> c));
-
-            RequestKey requestKey = new RequestKey(productIds, orderId);
-
-            List<ResponseKey> assignedKeys = keyInventoryClient.assignKeys(requestKey, userId);
-
-            Map<String, String> keyMap = assignedKeys.stream().collect(Collectors.toMap(ResponseKey::getProductId, ResponseKey::getGameKey));
-
-            List<OrderItemEntity> items = orderDto.getOrderItems().stream()
-                    .map(itemDto -> {
-                        String productId = itemDto.getProductId();
-
-                        ResponseCatalog catalog = catalogMap.get(productId);
-
-                        String key = keyMap.get(itemDto.getProductId());
-
-                        if (catalog == null) {
-                            throw new RuntimeException("Cannot find catalog for product id : " + itemDto.getProductId());
-                        }
-
-                        log.info("catalog : {}", catalog);
-                        log.info("realPrice : {}", catalog.getUnitPrice());
-
-                        log.info("Key : {}", key);
-
-                        return OrderItemEntity.create(
-                                itemDto.getProductId(),
-                                catalog.getUnitPrice(),
-                                key
-                        );
-                    }).toList();
-
-            OrderEntity orderEntity = OrderEntity.create(
-                    orderId,
-                    userId,
-                    orderDto.getUsedPoint() != null ? orderDto.getUsedPoint() : 0,
-                    items
-            );
-
-            orderRepository.save(orderEntity);
-
-            OrderDto result = modelMapper.map(orderEntity, OrderDto.class);
-            result.setUserId(userId);
-
-            return result;
-        } catch (Exception e) {
-            log.error("Order creation failed: {}", e.getMessage());
-            throw e;
+        if (productIds.size() != processedIds.size()) {
+            throw new RuntimeException("Insufficient stock for some items");
         }
+
+        List<ResponseCatalog> responseCatalogList = catalogServiceClient.getCatalogList(productIds);
+
+        log.info("catalog list : {}", responseCatalogList);
+
+        Map<String, ResponseCatalog> catalogMap = responseCatalogList.stream()
+                .collect(Collectors.toMap(ResponseCatalog::getProductId, c -> c));
+
+        RequestKey requestKey = new RequestKey(productIds, orderId);
+
+        List<ResponseKey> assignedKeys = keyInventoryClient.assignKeys(requestKey, userId);
+
+        Map<String, String> keyMap = assignedKeys.stream().collect(Collectors.toMap(ResponseKey::getProductId, ResponseKey::getGameKey));
+
+        List<OrderItemEntity> items = orderDto.getOrderItems().stream()
+                .map(itemDto -> {
+                    String productId = itemDto.getProductId();
+
+                    ResponseCatalog catalog = catalogMap.get(productId);
+
+                    String key = keyMap.get(itemDto.getProductId());
+
+                    if (catalog == null) {
+                        throw new RuntimeException("Cannot find catalog for product id : " + itemDto.getProductId());
+                    }
+
+                    log.info("catalog : {}", catalog);
+                    log.info("realPrice : {}", catalog.getUnitPrice());
+
+                    log.info("Key : {}", key);
+
+                    return OrderItemEntity.create(
+                            itemDto.getProductId(),
+                            catalog.getUnitPrice(),
+                            key
+                    );
+                }).toList();
+
+        OrderEntity orderEntity = OrderEntity.create(
+                orderId,
+                userId,
+                orderDto.getUsedPoint() != null ? orderDto.getUsedPoint() : 0,
+                items
+        );
+
+        orderRepository.save(orderEntity);
+
+        OrderDto result = modelMapper.map(orderEntity, OrderDto.class);
+        result.setUserId(userId);
+
+        return result;
     }
+
+//        try {
+//            List<String> processedIds = catalogServiceClient.decreaseStock(productIds);
+//
+//            if (productIds.size() != processedIds.size()) {
+//                throw new RuntimeException("Insufficient stock for some items");
+//            }
+//
+//            List<ResponseCatalog> responseCatalogList = catalogServiceClient.getCatalogList(productIds);
+//
+//            log.info("catalog list : {}", responseCatalogList);
+//
+//            Map<String, ResponseCatalog> catalogMap = responseCatalogList.stream()
+//                    .collect(Collectors.toMap(ResponseCatalog::getProductId, c -> c));
+//
+//            RequestKey requestKey = new RequestKey(productIds, orderId);
+//
+//            List<ResponseKey> assignedKeys = keyInventoryClient.assignKeys(requestKey, userId);
+//
+//            Map<String, String> keyMap = assignedKeys.stream().collect(Collectors.toMap(ResponseKey::getProductId, ResponseKey::getGameKey));
+//
+//            List<OrderItemEntity> items = orderDto.getOrderItems().stream()
+//                    .map(itemDto -> {
+//                        String productId = itemDto.getProductId();
+//
+//                        ResponseCatalog catalog = catalogMap.get(productId);
+//
+//                        String key = keyMap.get(itemDto.getProductId());
+//
+//                        if (catalog == null) {
+//                            throw new RuntimeException("Cannot find catalog for product id : " + itemDto.getProductId());
+//                        }
+//
+//                        log.info("catalog : {}", catalog);
+//                        log.info("realPrice : {}", catalog.getUnitPrice());
+//
+//                        log.info("Key : {}", key);
+//
+//                        return OrderItemEntity.create(
+//                                itemDto.getProductId(),
+//                                catalog.getUnitPrice(),
+//                                key
+//                        );
+//                    }).toList();
+//
+//            OrderEntity orderEntity = OrderEntity.create(
+//                    orderId,
+//                    userId,
+//                    orderDto.getUsedPoint() != null ? orderDto.getUsedPoint() : 0,
+//                    items
+//            );
+//
+//            orderRepository.save(orderEntity);
+//
+//            OrderDto result = modelMapper.map(orderEntity, OrderDto.class);
+//            result.setUserId(userId);
+//
+//            return result;
+//        } catch (Exception e) {
+//            log.error("Order creation failed: {}", e.getMessage());
+//            throw e;
+//        }
+//    }
 
     @Override
     @Transactional

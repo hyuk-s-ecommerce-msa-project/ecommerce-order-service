@@ -9,12 +9,12 @@ import java.util.List;
 
 @FeignClient(name = "catalog-service")
 public interface CatalogServiceClient {
-    @PostMapping("catalog-service/catalogs/queries")
+    @PostMapping("/catalog-service/catalogs/queries")
     List<ResponseCatalog> getCatalogList(@RequestBody List<String> productIds);
 
-    @PostMapping("/catalogs/stock/increase")
-    List<String> increaseStock(@RequestBody List<String> productIds);
+    @PostMapping("/catalog-service/catalogs/stock/increase")
+    List<ResponseCatalog> increaseStock(@RequestBody List<String> productIds);
 
-    @PostMapping("/catalogs/stock/decrease")
-    List<String> decreaseStock(@RequestBody List<String> productIds);
+    @PostMapping("/catalog-service/catalogs/stock/decrease")
+    List<ResponseCatalog> decreaseStock(@RequestBody List<String> productIds);
 }
