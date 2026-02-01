@@ -7,4 +7,5 @@ public class OrderItemsDto {
     private String productId;
     private Integer unitPrice;
     private String deliveredKey;
+    private Integer stock;
 }

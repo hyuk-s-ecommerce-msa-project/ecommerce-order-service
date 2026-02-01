@@ -12,9 +12,9 @@ import java.util.List;
 
 @FeignClient("key-inventory-service")
 public interface KeyInventoryClient {
-    @PostMapping("key-inventory/assign")
+    @PostMapping("/key-inventory/assign")
     List<ResponseKey> assignKeys(@RequestBody RequestKey requestKey, @RequestHeader("userId") String userId);
 
-    @PostMapping("key-inventory/revoke")
+    @PostMapping("/key-inventory/revoke")
     List<ResponseKey> revokeKey(@RequestBody RequestKey requestKey, @RequestHeader("userId") String userId);
 }

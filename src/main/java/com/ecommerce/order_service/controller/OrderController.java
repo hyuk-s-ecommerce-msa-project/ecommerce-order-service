@@ -2,6 +2,7 @@ package com.ecommerce.order_service.controller;
 
 import com.ecommerce.order_service.dto.OrderDto;
 import com.ecommerce.order_service.entity.OrderEntity;
+import com.ecommerce.order_service.messagequeue.KafkaProducer;
 import com.ecommerce.order_service.service.OrderService;
 import com.ecommerce.order_service.vo.RequestOrder;
 import com.ecommerce.order_service.vo.ResponseOrder;
@@ -25,6 +26,7 @@ public class OrderController {
     private final OrderService orderService;
     private final Environment env;
     private final ModelMapper modelMapper;
+    private final KafkaProducer kafkaProducer;
 
     @GetMapping("/health-check")
     public String status() {
@@ -37,8 +39,12 @@ public class OrderController {
     public ResponseEntity<ResponseOrder> createOrder(@RequestHeader("userId") String userId, @RequestBody RequestOrder requestOrder) {
         OrderDto orderDto = modelMapper.map(requestOrder, OrderDto.class);
 
+        // jpa
         OrderDto createOrderDto = orderService.createOrder(orderDto, userId);
         ResponseOrder responseOrder = modelMapper.map(createOrderDto, ResponseOrder.class);
+
+        // kafka
+        kafkaProducer.send("order-success-topic", createOrderDto);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(responseOrder);
     }
@@ -69,6 +75,8 @@ public class OrderController {
         OrderDto canceledOrder = orderService.cancelOrder(orderId, userId);
 
         ResponseOrder responseOrder = modelMapper.map(canceledOrder, ResponseOrder.class);
+
+        kafkaProducer.send("order-cancel-topic", canceledOrder);
 
         return ResponseEntity.status(HttpStatus.NO_CONTENT).body(responseOrder);
     }

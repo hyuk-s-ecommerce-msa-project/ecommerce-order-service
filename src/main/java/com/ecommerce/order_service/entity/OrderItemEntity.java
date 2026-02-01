@@ -20,6 +20,9 @@ public class OrderItemEntity {
     @Column(nullable = false)
     private String deliveredKey;
 
+    @Column(nullable = false)
+    private Integer stock;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "order_id")
     private OrderEntity order;
@@ -28,11 +31,12 @@ public class OrderItemEntity {
         this.order = order;
     }
 
-    public static OrderItemEntity create(String productId, Integer unitPrice, String deliveredKey) {
+    public static OrderItemEntity create(String productId, Integer unitPrice, String deliveredKey, Integer stock) {
         OrderItemEntity item = new OrderItemEntity();
         item.productId = productId;
         item.unitPrice = unitPrice;
         item.deliveredKey = deliveredKey;
+        item.stock = stock;
         return item;
     }
 }
