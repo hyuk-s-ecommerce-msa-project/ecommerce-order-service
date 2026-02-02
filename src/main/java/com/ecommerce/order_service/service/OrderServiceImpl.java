@@ -116,8 +116,6 @@ public class OrderServiceImpl implements OrderService {
         try {
             List<ResponseCatalog> responseCatalogList = catalogServiceClient.getCatalogList(productIds);
 
-            log.info("catalog list : {}", responseCatalogList);
-
             Map<String, ResponseCatalog> catalogMap = responseCatalogList.stream()
                     .collect(Collectors.toMap(ResponseCatalog::getProductId, c -> c));
 
@@ -127,58 +125,35 @@ public class OrderServiceImpl implements OrderService {
 
             Map<String, String> keyMap = assignedKeys.stream().collect(Collectors.toMap(ResponseKey::getProductId, ResponseKey::getGameKey));
 
-            List<OrderItemEntity> items = orderDto.getOrderItems().stream()
-                    .map(itemDto -> {
-                        String productId = itemDto.getProductId();
+            orderDto.setOrderId(orderId);
+            orderDto.setUserId(userId);
+            orderDto.setOrderStatus(OrderStatus.CREATED);
+            orderDto.setCreatedAt(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
 
-                        ResponseCatalog catalog = catalogMap.get(productId);
+            orderDto.getOrderItems().forEach(orderItemDto -> {
+                ResponseCatalog responseCatalog = catalogMap.get(orderItemDto.getProductId());
 
-                        String key = keyMap.get(itemDto.getProductId());
+                orderItemDto.setProductId(responseCatalog.getProductId());
+                orderItemDto.setUnitPrice(responseCatalog.getUnitPrice());
+                orderItemDto.setDeliveredKey(keyMap.get(orderItemDto.getProductId()));
+                orderItemDto.setStock(1);
+            });
 
-                        if (catalog == null) {
-                            throw new RuntimeException("Cannot find catalog for product id : " + itemDto.getProductId());
-                        }
+            int total = orderDto.getOrderItems().stream().mapToInt(OrderItemsDto::getUnitPrice).sum();
+            int payAmount = total - orderDto.getUsedPoint();
 
-                        log.info("catalog : {}", catalog);
-                        log.info("realPrice : {}", catalog.getUnitPrice());
+            orderDto.setTotalAmount(total);
+            orderDto.setPayAmount(payAmount);
 
-                        log.info("Key : {}", key);
 
-                        return OrderItemEntity.create(
-                                itemDto.getProductId(),
-                                catalog.getUnitPrice(),
-                                key,
-                                1
-                        );
-                    }).toList();
-
-            OrderEntity orderEntity = OrderEntity.create(
-                    orderId,
-                    userId,
-                    orderDto.getUsedPoint() != null ? orderDto.getUsedPoint() : 0,
-                    items
-            );
-
-            if (orderEntity.getUsedPoint() != null && orderEntity.getUsedPoint() > 0) {
+            if (orderDto.getUsedPoint() != null && orderDto.getUsedPoint() > 0) {
                 RequestPoint requestPoint = new RequestPoint();
-                requestPoint.setPoint(orderEntity.getUsedPoint());
+                requestPoint.setPoint(orderDto.getUsedPoint());
 
-                try {
-                    log.info("used point : {}", requestPoint);
-                    userServiceClient.usePoint(userId, requestPoint);
-                    log.info("Point deduction successful for user: {}, points: {}", userId, orderEntity.getUsedPoint());
-                } catch (Exception e) {
-                    log.error("Failed to deduct points for order: {}", orderId);
-                    throw new RuntimeException("Point service error, rolling back order completion");
-                }
+                userServiceClient.usePoint(userId, requestPoint);
             }
 
-            orderRepository.save(orderEntity);
-
-            OrderDto result = modelMapper.map(orderEntity, OrderDto.class);
-            result.setUserId(userId);
-
-            return result;
+            return orderDto;
         } catch (Exception e) {
             log.error("Order creation failed: {}", e.getMessage());
             throw e;

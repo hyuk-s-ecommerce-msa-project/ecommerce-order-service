@@ -17,9 +17,21 @@ spring:
     redis:
       host: localhost
       port: 6379
+  h2:
+    console:
+      enabled: true
+      settings:
+        web-allow-others: true
+      path: /h2-console
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: create
+    show-sql: true
+    properties:
+      hibernate:
+        use_id_generator_strategy_three_lo: false
+        format_sql: true
+        dialect: org.hibernate.dialect.MariaDBDialect
 eureka:
   instance:
     instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}}

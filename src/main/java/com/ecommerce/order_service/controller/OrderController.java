@@ -3,6 +3,7 @@ package com.ecommerce.order_service.controller;
 import com.ecommerce.order_service.dto.OrderDto;
 import com.ecommerce.order_service.entity.OrderEntity;
 import com.ecommerce.order_service.messagequeue.KafkaProducer;
+import com.ecommerce.order_service.messagequeue.OrderProducer;
 import com.ecommerce.order_service.service.OrderService;
 import com.ecommerce.order_service.vo.RequestOrder;
 import com.ecommerce.order_service.vo.ResponseOrder;
@@ -27,6 +28,7 @@ public class OrderController {
     private final Environment env;
     private final ModelMapper modelMapper;
     private final KafkaProducer kafkaProducer;
+    private final OrderProducer orderProducer;
 
     @GetMapping("/health-check")
     public String status() {
@@ -36,17 +38,16 @@ public class OrderController {
     }
 
     @PostMapping("/orders")
-    public ResponseEntity<ResponseOrder> createOrder(@RequestHeader("userId") String userId, @RequestBody RequestOrder requestOrder) {
+    public ResponseEntity<OrderDto> createOrder(@RequestHeader("userId") String userId, @RequestBody RequestOrder requestOrder) {
         OrderDto orderDto = modelMapper.map(requestOrder, OrderDto.class);
 
-        // jpa
-        OrderDto createOrderDto = orderService.createOrder(orderDto, userId);
-        ResponseOrder responseOrder = modelMapper.map(createOrderDto, ResponseOrder.class);
+        OrderDto dto = orderService.createOrder(orderDto, userId);
 
         // kafka
-        kafkaProducer.send("order-success-topic", createOrderDto);
+        orderProducer.send("orders", dto);
+        kafkaProducer.send("order-success-topic", dto);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(responseOrder);
+        return ResponseEntity.status(HttpStatus.CREATED).body(dto);
     }
 
     @GetMapping("/orders")
