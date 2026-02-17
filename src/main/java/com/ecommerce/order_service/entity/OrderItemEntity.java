@@ -24,7 +24,7 @@ public class OrderItemEntity {
     private Integer stock;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "order_id", columnDefinition = "VARCHAR(255)")
+    @JoinColumn(name = "order_id", referencedColumnName = "orderId")
     private OrderEntity order;
 
     void setOrder(OrderEntity order) {

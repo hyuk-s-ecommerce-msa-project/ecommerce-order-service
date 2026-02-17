@@ -1,22 +1,17 @@
 package com.ecommerce.order_service.controller;
 
 import com.ecommerce.order_service.dto.OrderDto;
-import com.ecommerce.order_service.entity.OrderEntity;
-import com.ecommerce.order_service.messagequeue.KafkaProducer;
-import com.ecommerce.order_service.messagequeue.OrderProducer;
 import com.ecommerce.order_service.service.OrderService;
 import com.ecommerce.order_service.vo.RequestOrder;
 import com.ecommerce.order_service.vo.ResponseOrder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
-import org.modelmapper.convention.MatchingStrategies;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @RestController
@@ -27,8 +22,6 @@ public class OrderController {
     private final OrderService orderService;
     private final Environment env;
     private final ModelMapper modelMapper;
-    private final KafkaProducer kafkaProducer;
-    private final OrderProducer orderProducer;
 
     @GetMapping("/health-check")
     public String status() {
@@ -42,10 +35,6 @@ public class OrderController {
         OrderDto orderDto = modelMapper.map(requestOrder, OrderDto.class);
 
         OrderDto dto = orderService.createOrder(orderDto, userId);
-
-        // kafka
-        orderProducer.send("orders", dto);
-        kafkaProducer.send("order-success-topic", dto);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(dto);
     }
@@ -77,9 +66,7 @@ public class OrderController {
 
         ResponseOrder responseOrder = modelMapper.map(canceledOrder, ResponseOrder.class);
 
-        kafkaProducer.send("order-cancel-topic", canceledOrder);
-
-        return ResponseEntity.status(HttpStatus.NO_CONTENT).body(responseOrder);
+        return ResponseEntity.status(HttpStatus.OK).body(responseOrder);
     }
 
     @PostMapping("/orders/{orderId}/complete")

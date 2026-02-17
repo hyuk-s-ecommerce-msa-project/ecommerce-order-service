@@ -9,6 +9,8 @@ import com.ecommerce.order_service.entity.OrderEntity;
 import com.ecommerce.order_service.entity.OrderItemEntity;
 import com.ecommerce.order_service.entity.enums.OrderStatus;
 import com.ecommerce.order_service.exception.OrderNotFoundException;
+import com.ecommerce.order_service.messagequeue.KafkaProducer;
+import com.ecommerce.order_service.messagequeue.OrderProducer;
 import com.ecommerce.order_service.repository.OrderRepository;
 import com.ecommerce.order_service.vo.RequestKey;
 import com.ecommerce.order_service.vo.RequestPoint;
@@ -37,6 +39,8 @@ public class OrderServiceImpl implements OrderService {
     private final CatalogServiceClient catalogServiceClient;
     private final UserServiceClient userServiceClient;
     private final KeyInventoryClient keyInventoryClient;
+    private final KafkaProducer kafkaProducer;
+    private final OrderProducer orderProducer;
 
     @Override
     @Transactional
@@ -82,6 +86,19 @@ public class OrderServiceImpl implements OrderService {
                             orderId, key.getProductId(), key.getGameKey())
             );
 
+            OrderDto orderDto = modelMapper.map(orderEntity, OrderDto.class);
+
+            List<OrderItemsDto> itemDtos = orderEntity.getOrderItems().stream()
+                    .map(item -> modelMapper.map(item, OrderItemsDto.class))
+                    .toList();
+
+            orderDto.setOrderItems(itemDtos);
+
+            log.info("orderdto : {}", orderDto);
+
+            kafkaProducer.send("order-cancel-topic", orderDto);
+            orderProducer.send("orders", orderDto);
+
             return modelMapper.map(orderEntity, OrderDto.class);
         } catch (Exception e) {
             log.error("Order cancellation failed. Starting compensation... : {}", e.getMessage());
@@ -100,7 +117,11 @@ public class OrderServiceImpl implements OrderService {
 
         orderEntity.complete();
 
-        return modelMapper.map(orderEntity, OrderDto.class);
+        OrderDto orderDto = modelMapper.map(orderEntity, OrderDto.class);
+
+        orderProducer.send("orders", orderDto);
+
+        return orderDto;
     }
 
     @Override
@@ -152,6 +173,9 @@ public class OrderServiceImpl implements OrderService {
 
                 userServiceClient.usePoint(userId, requestPoint);
             }
+
+            orderProducer.send("orders", orderDto);
+            kafkaProducer.send("order-success-topic", orderDto);
 
             return orderDto;
         } catch (Exception e) {
