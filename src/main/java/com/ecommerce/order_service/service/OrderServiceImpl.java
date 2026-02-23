@@ -12,6 +12,7 @@ import com.ecommerce.order_service.exception.OrderNotFoundException;
 import com.ecommerce.order_service.messagequeue.KafkaProducer;
 import com.ecommerce.order_service.messagequeue.OrderProducer;
 import com.ecommerce.order_service.repository.OrderRepository;
+import com.ecommerce.order_service.service.connector.InternalServiceConnector;
 import com.ecommerce.order_service.vo.RequestKey;
 import com.ecommerce.order_service.vo.RequestPoint;
 import com.ecommerce.order_service.vo.ResponseCatalog;
@@ -41,6 +42,7 @@ public class OrderServiceImpl implements OrderService {
     private final KeyInventoryClient keyInventoryClient;
     private final KafkaProducer kafkaProducer;
     private final OrderProducer orderProducer;
+    private final InternalServiceConnector internalConnector;
 
     @Override
     @Transactional
@@ -68,13 +70,15 @@ public class OrderServiceImpl implements OrderService {
                 RequestPoint requestPoint = new RequestPoint();
                 requestPoint.setPoint(orderEntity.getUsedPoint());
 
-                userServiceClient.restorePoints(userId, requestPoint);
+//                userServiceClient.restorePoints(userId, requestPoint);
+                internalConnector.restoreUserPoints(userId, requestPoint);
 
                 log.info("Starting point restoration process, user ID : {}, used point : {}", orderEntity.getUserId(), orderEntity.getUsedPoint());
             }
 
             RequestKey requestKey = new RequestKey(productIds, orderId);
-            List<ResponseKey> responseKey = keyInventoryClient.revokeKey(requestKey, userId);
+//            List<ResponseKey> responseKey = keyInventoryClient.revokeKey(requestKey, userId);
+            List<ResponseKey> responseKey =  internalConnector.revokeGameKeys(requestKey, userId);
 
             if (responseKey.size() != productIds.size()) {
                 log.warn("Key revocation mismatch: Requested {}, but revoked {}",
@@ -135,14 +139,16 @@ public class OrderServiceImpl implements OrderService {
         List<String> productIds = orderDto.getOrderItems().stream().map(OrderItemsDto::getProductId).toList();
 
         try {
-            List<ResponseCatalog> responseCatalogList = catalogServiceClient.getCatalogList(productIds);
+//            List<ResponseCatalog> responseCatalogList = catalogServiceClient.getCatalogList(productIds);
+            List<ResponseCatalog> responseCatalogList = internalConnector.getCatalogList(productIds);
 
             Map<String, ResponseCatalog> catalogMap = responseCatalogList.stream()
                     .collect(Collectors.toMap(ResponseCatalog::getProductId, c -> c));
 
             RequestKey requestKey = new RequestKey(productIds, orderId);
 
-            List<ResponseKey> assignedKeys = keyInventoryClient.assignKeys(requestKey, userId);
+//            List<ResponseKey> assignedKeys = keyInventoryClient.assignKeys(requestKey, userId);
+            List<ResponseKey> assignedKeys = internalConnector.assignKeys(requestKey, userId);
 
             Map<String, String> keyMap = assignedKeys.stream().collect(Collectors.toMap(ResponseKey::getProductId, ResponseKey::getGameKey));
 
@@ -171,7 +177,8 @@ public class OrderServiceImpl implements OrderService {
                 RequestPoint requestPoint = new RequestPoint();
                 requestPoint.setPoint(orderDto.getUsedPoint());
 
-                userServiceClient.usePoint(userId, requestPoint);
+//                userServiceClient.usePoint(userId, requestPoint);
+                internalConnector.withdrawPoint(userId, requestPoint);
             }
 
             orderProducer.send("orders", orderDto);

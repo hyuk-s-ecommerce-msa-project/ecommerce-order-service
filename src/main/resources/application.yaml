@@ -10,9 +10,12 @@ spring:
   cloud:
     config:
       name: gameinfo
+    openfeign:
+      circuitbreaker:
+        enabled: true
   config:
     import:
-      - "optional:configserver:http://localhost:8888"
+      - "optional:configserver:http://localhost:9088"
   data:
     redis:
       host: localhost
@@ -46,6 +49,12 @@ logging:
     org.springframework.security: DEBUG
 
 management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: "http://localhost:9411/api/v2/spans"
   endpoints:
     web:
       exposure:
@@ -54,3 +63,5 @@ management:
           - beans
           - info
           - busrefresh
+          - prometheus
+          - metrics
