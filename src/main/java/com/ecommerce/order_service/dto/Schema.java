@@ -8,6 +8,7 @@ import java.util.List;
 @Data
 @Builder
 public class Schema {
+    private Long id;
     private String type;
     private List<Field> fields;
     private boolean optional;

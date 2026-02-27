@@ -3,6 +3,8 @@ package com.ecommerce.order_service.service.connector;
 import com.ecommerce.order_service.client.CatalogServiceClient;
 import com.ecommerce.order_service.client.KeyInventoryClient;
 import com.ecommerce.order_service.client.UserServiceClient;
+import com.ecommerce.order_service.dto.OrderDto;
+import com.ecommerce.order_service.messagequeue.KafkaProducer;
 import com.ecommerce.order_service.vo.RequestKey;
 import com.ecommerce.order_service.vo.RequestPoint;
 import com.ecommerce.order_service.vo.ResponseCatalog;
@@ -23,6 +25,7 @@ public class InternalServiceConnector {
     private final CatalogServiceClient catalogServiceClient;
     private final KeyInventoryClient keyInventoryClient;
     private final UserServiceClient userServiceClient;
+    private final KafkaProducer kafkaProducer;
 
     @CircuitBreaker(name = "userService_restore_circuitBreaker", fallbackMethod = "fallbackUserPoints")
     public void restoreUserPoints(String userId, RequestPoint requestPoint) {
@@ -79,7 +82,13 @@ public class InternalServiceConnector {
     private void fallbackUserPoints(String userId, RequestPoint requestPoint, Throwable throwable) {
         log.error("User service 포인트 복구 실패 : userId : {}, error : {}", userId, throwable.getMessage());
 
-        throw new RuntimeException("포인트 복구 중 장애가 발생했습니다. 나중에 다시 시도하세요.");
+        OrderDto retryDto = new OrderDto();
+        retryDto.setUserId(userId);
+        retryDto.setUsedPoint(requestPoint.getPoint());
+
+        kafkaProducer.send("order-cancel-topic", retryDto);
+
+        log.info("복구 메시지 전송 완료. 나중에 서비스가 복구되면 자동으로 처리됩니다.");
     }
 
     private List<ResponseKey> fallbackRevokeKeys(RequestKey requestKey, String userId,  Throwable throwable) {

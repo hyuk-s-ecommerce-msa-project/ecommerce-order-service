@@ -11,6 +11,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class OrderItemPayload {
+    private Long id;
+
     @JsonProperty("order_id")
     private String orderId;
 

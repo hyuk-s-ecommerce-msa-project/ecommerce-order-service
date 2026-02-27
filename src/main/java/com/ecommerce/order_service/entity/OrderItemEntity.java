@@ -8,7 +8,6 @@ import lombok.Getter;
 @Table(name = "order_items")
 public class OrderItemEntity {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(nullable = false)
@@ -31,8 +30,10 @@ public class OrderItemEntity {
         this.order = order;
     }
 
-    public static OrderItemEntity create(String productId, Integer unitPrice, String deliveredKey, Integer stock) {
+    public static OrderItemEntity create(Long id, String productId, Integer unitPrice, String deliveredKey, Integer stock) {
         OrderItemEntity item = new OrderItemEntity();
+
+        item.id = id;
         item.productId = productId;
         item.unitPrice = unitPrice;
         item.deliveredKey = deliveredKey;

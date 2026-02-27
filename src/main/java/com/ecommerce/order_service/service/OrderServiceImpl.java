@@ -1,22 +1,18 @@
 package com.ecommerce.order_service.service;
 
-import com.ecommerce.order_service.client.CatalogServiceClient;
-import com.ecommerce.order_service.client.KeyInventoryClient;
-import com.ecommerce.order_service.client.UserServiceClient;
-import com.ecommerce.order_service.dto.OrderDto;
-import com.ecommerce.order_service.dto.OrderItemsDto;
+import com.ecommerce.order_service.dto.*;
 import com.ecommerce.order_service.entity.OrderEntity;
 import com.ecommerce.order_service.entity.OrderItemEntity;
 import com.ecommerce.order_service.entity.enums.OrderStatus;
 import com.ecommerce.order_service.exception.OrderNotFoundException;
-import com.ecommerce.order_service.messagequeue.KafkaProducer;
-import com.ecommerce.order_service.messagequeue.OrderProducer;
+import com.ecommerce.order_service.messagequeue.OutboxProducer;
 import com.ecommerce.order_service.repository.OrderRepository;
 import com.ecommerce.order_service.service.connector.InternalServiceConnector;
 import com.ecommerce.order_service.vo.RequestKey;
 import com.ecommerce.order_service.vo.RequestPoint;
 import com.ecommerce.order_service.vo.ResponseCatalog;
 import com.ecommerce.order_service.vo.ResponseKey;
+import com.ecommerce.snowflake.util.SnowflakeIdGenerator;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,12 +33,9 @@ import java.util.stream.Collectors;
 public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final ModelMapper modelMapper;
-    private final CatalogServiceClient catalogServiceClient;
-    private final UserServiceClient userServiceClient;
-    private final KeyInventoryClient keyInventoryClient;
-    private final KafkaProducer kafkaProducer;
-    private final OrderProducer orderProducer;
     private final InternalServiceConnector internalConnector;
+    private final SnowflakeIdGenerator snowflakeIdGenerator;
+    private final OutboxProducer outboxProducer;
 
     @Override
     @Transactional
@@ -70,14 +63,12 @@ public class OrderServiceImpl implements OrderService {
                 RequestPoint requestPoint = new RequestPoint();
                 requestPoint.setPoint(orderEntity.getUsedPoint());
 
-//                userServiceClient.restorePoints(userId, requestPoint);
                 internalConnector.restoreUserPoints(userId, requestPoint);
 
                 log.info("Starting point restoration process, user ID : {}, used point : {}", orderEntity.getUserId(), orderEntity.getUsedPoint());
             }
 
             RequestKey requestKey = new RequestKey(productIds, orderId);
-//            List<ResponseKey> responseKey = keyInventoryClient.revokeKey(requestKey, userId);
             List<ResponseKey> responseKey =  internalConnector.revokeGameKeys(requestKey, userId);
 
             if (responseKey.size() != productIds.size()) {
@@ -100,10 +91,9 @@ public class OrderServiceImpl implements OrderService {
 
             log.info("orderdto : {}", orderDto);
 
-            kafkaProducer.send("order-cancel-topic", orderDto);
-            orderProducer.send("orders", orderDto);
+            outboxProducer.sendToOutbox(orderDto, "ORDER_CANCELED");
 
-            return modelMapper.map(orderEntity, OrderDto.class);
+            return orderDto;
         } catch (Exception e) {
             log.error("Order cancellation failed. Starting compensation... : {}", e.getMessage());
             throw e;
@@ -123,7 +113,7 @@ public class OrderServiceImpl implements OrderService {
 
         OrderDto orderDto = modelMapper.map(orderEntity, OrderDto.class);
 
-        orderProducer.send("orders", orderDto);
+        outboxProducer.sendToOutbox(orderDto, "ORDER_COMPLETED");
 
         return orderDto;
     }
@@ -135,11 +125,11 @@ public class OrderServiceImpl implements OrderService {
         String randomSuffix = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
         String orderId = datePrefix + "-ORDER-" + randomSuffix;
+        Long snowflakeId = snowflakeIdGenerator.nextId();
 
         List<String> productIds = orderDto.getOrderItems().stream().map(OrderItemsDto::getProductId).toList();
 
         try {
-//            List<ResponseCatalog> responseCatalogList = catalogServiceClient.getCatalogList(productIds);
             List<ResponseCatalog> responseCatalogList = internalConnector.getCatalogList(productIds);
 
             Map<String, ResponseCatalog> catalogMap = responseCatalogList.stream()
@@ -147,11 +137,31 @@ public class OrderServiceImpl implements OrderService {
 
             RequestKey requestKey = new RequestKey(productIds, orderId);
 
-//            List<ResponseKey> assignedKeys = keyInventoryClient.assignKeys(requestKey, userId);
             List<ResponseKey> assignedKeys = internalConnector.assignKeys(requestKey, userId);
 
             Map<String, String> keyMap = assignedKeys.stream().collect(Collectors.toMap(ResponseKey::getProductId, ResponseKey::getGameKey));
 
+            List<OrderItemEntity> orderItemEntities = orderDto.getOrderItems().stream().map(itemDto -> {
+                ResponseCatalog catalog = catalogMap.get(itemDto.getProductId());
+                Long itemSnowflakeId = snowflakeIdGenerator.nextId();
+
+                // DTO 업데이트 (반환용)
+                itemDto.setId(itemSnowflakeId);
+                itemDto.setUnitPrice(catalog.getUnitPrice());
+                itemDto.setDeliveredKey(keyMap.get(itemDto.getProductId()));
+                itemDto.setStock(1);
+
+                // Entity 생성
+                return OrderItemEntity.create(
+                        itemSnowflakeId,
+                        catalog.getProductId(),
+                        catalog.getUnitPrice(),
+                        keyMap.get(itemDto.getProductId()),
+                        1
+                );
+            }).toList();
+
+            orderDto.setId(snowflakeId);
             orderDto.setOrderId(orderId);
             orderDto.setUserId(userId);
             orderDto.setOrderStatus(OrderStatus.CREATED);
@@ -160,6 +170,9 @@ public class OrderServiceImpl implements OrderService {
             orderDto.getOrderItems().forEach(orderItemDto -> {
                 ResponseCatalog responseCatalog = catalogMap.get(orderItemDto.getProductId());
 
+                Long itemSnowflakeId = snowflakeIdGenerator.nextId();
+
+                orderItemDto.setId(itemSnowflakeId);
                 orderItemDto.setProductId(responseCatalog.getProductId());
                 orderItemDto.setUnitPrice(responseCatalog.getUnitPrice());
                 orderItemDto.setDeliveredKey(keyMap.get(orderItemDto.getProductId()));
@@ -177,12 +190,11 @@ public class OrderServiceImpl implements OrderService {
                 RequestPoint requestPoint = new RequestPoint();
                 requestPoint.setPoint(orderDto.getUsedPoint());
 
-//                userServiceClient.usePoint(userId, requestPoint);
                 internalConnector.withdrawPoint(userId, requestPoint);
             }
 
-            orderProducer.send("orders", orderDto);
-            kafkaProducer.send("order-success-topic", orderDto);
+            outboxProducer.sendToOutbox(orderDto, "ORDER_CREATED");
+
 
             return orderDto;
         } catch (Exception e) {

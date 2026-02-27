@@ -10,6 +10,7 @@ import com.ecommerce.order_service.exception.CartNotFoundException;
 import com.ecommerce.order_service.exception.UserNotFoundException;
 import com.ecommerce.order_service.repository.CartRedisRepository;
 import com.ecommerce.order_service.repository.CartRepository;
+import com.ecommerce.snowflake.util.SnowflakeIdGenerator;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
@@ -26,6 +27,7 @@ public class CartServiceImpl implements CartService {
     private final CartRepository cartRepository;
     private final CartRedisRepository cartRedisRepository;
     private final ModelMapper modelMapper;
+    private final SnowflakeIdGenerator snowflakeIdGenerator;
 
     private final Integer EXPIRED_DAYS = 30;
 
@@ -39,9 +41,11 @@ public class CartServiceImpl implements CartService {
         }
 
         String cartId = "Cart-" + UUID.randomUUID().toString();
+        Long snowflakeId = snowflakeIdGenerator.nextId();
 
         // MYSQL 저장
         CartEntity cart = CartEntity.create(
+                snowflakeId,
                 cartId,
                 cartDto.getProductName(),
                 cartDto.getPrice(),

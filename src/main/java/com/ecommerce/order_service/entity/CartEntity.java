@@ -18,7 +18,6 @@ import java.util.List;
 @Table(name = "cart")
 public class CartEntity {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(nullable = false)
@@ -42,10 +41,11 @@ public class CartEntity {
     @CreatedDate
     private LocalDateTime createdAt;
 
-    public static CartEntity create(String cartId, String productName, Integer price, String thumbnailUrl,
+    public static CartEntity create(Long id, String cartId, String productName, Integer price, String thumbnailUrl,
                                     String userId, String productId) {
         CartEntity cartEntity = new CartEntity();
 
+        cartEntity.id = id;
         cartEntity.cartId = cartId;
         cartEntity.productName = productName;
         cartEntity.price = price;

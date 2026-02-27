@@ -20,7 +20,6 @@ import java.util.List;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class OrderEntity {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(nullable = false, unique = true, length = 255)
@@ -48,9 +47,10 @@ public class OrderEntity {
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    public static OrderEntity create(String orderId, String userId, Integer usedPoint, List<OrderItemEntity> items) {
+    public static OrderEntity create(Long id, String orderId, String userId, Integer usedPoint, List<OrderItemEntity> items) {
         OrderEntity order = new OrderEntity();
 
+        order.id = id;
         order.orderId = orderId;
         order.userId = userId;
         order.usedPoint = usedPoint;

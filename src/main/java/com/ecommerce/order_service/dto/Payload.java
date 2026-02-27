@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @NoArgsConstructor
 public class Payload {
+    private Long id;
     @JsonProperty("order_id")
     private String orderId;
     @JsonProperty("user_id")
