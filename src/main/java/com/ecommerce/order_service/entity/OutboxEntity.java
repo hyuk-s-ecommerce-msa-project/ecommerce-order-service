@@ -27,7 +27,7 @@ public class OutboxEntity {
     @Column(name = "type")
     private String eventType;
 
-    @Column(columnDefinition = "text", nullable = false)
+    @Column(columnDefinition = "json", nullable = false)
     private String payload;
 
     @CreatedDate

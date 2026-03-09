@@ -1,6 +1,7 @@
 package com.ecommerce.order_service.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonRawValue;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,6 +21,8 @@ public class Payload {
     private String userId;
     @JsonProperty("total_amount")
     private Integer totalAmount;
+    @JsonProperty("items_json")
+    private Object itemsJson;
     @JsonProperty("used_point")
     private Integer usedPoint;
     @JsonProperty("pay_amount")

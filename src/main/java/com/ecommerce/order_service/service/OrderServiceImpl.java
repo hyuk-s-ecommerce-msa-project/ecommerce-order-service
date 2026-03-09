@@ -1,5 +1,6 @@
 package com.ecommerce.order_service.service;
 
+import com.ecommerce.order_service.config.ShardContextHolder;
 import com.ecommerce.order_service.dto.*;
 import com.ecommerce.order_service.entity.OrderEntity;
 import com.ecommerce.order_service.entity.OrderItemEntity;
@@ -119,8 +120,10 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    @Transactional
     public OrderDto createOrder(OrderDto orderDto, String userId) {
+        int shardIndex = Math.abs(userId.hashCode() % 2);
+        ShardContextHolder.setShardIndex(shardIndex);
+
         String datePrefix = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         String randomSuffix = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
@@ -141,50 +144,26 @@ public class OrderServiceImpl implements OrderService {
 
             Map<String, String> keyMap = assignedKeys.stream().collect(Collectors.toMap(ResponseKey::getProductId, ResponseKey::getGameKey));
 
-            List<OrderItemEntity> orderItemEntities = orderDto.getOrderItems().stream().map(itemDto -> {
-                ResponseCatalog catalog = catalogMap.get(itemDto.getProductId());
-                Long itemSnowflakeId = snowflakeIdGenerator.nextId();
+            setupOrderDetails(orderDto, userId, orderId, snowflakeId, catalogMap, keyMap);
 
-                // DTO 업데이트 (반환용)
-                itemDto.setId(itemSnowflakeId);
-                itemDto.setUnitPrice(catalog.getUnitPrice());
-                itemDto.setDeliveredKey(keyMap.get(itemDto.getProductId()));
-                itemDto.setStock(1);
+            List<OrderItemEntity> itemEntities = orderDto.getOrderItems().stream()
+                    .map(itemDto -> OrderItemEntity.create(
+                            itemDto.getId(),
+                            itemDto.getProductId(),
+                            itemDto.getUnitPrice(),
+                            itemDto.getDeliveredKey(),
+                            1
+                    ))
+                    .toList();
 
-                // Entity 생성
-                return OrderItemEntity.create(
-                        itemSnowflakeId,
-                        catalog.getProductId(),
-                        catalog.getUnitPrice(),
-                        keyMap.get(itemDto.getProductId()),
-                        1
-                );
-            }).toList();
-
-            orderDto.setId(snowflakeId);
-            orderDto.setOrderId(orderId);
-            orderDto.setUserId(userId);
-            orderDto.setOrderStatus(OrderStatus.CREATED);
-            orderDto.setCreatedAt(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-
-            orderDto.getOrderItems().forEach(orderItemDto -> {
-                ResponseCatalog responseCatalog = catalogMap.get(orderItemDto.getProductId());
-
-                Long itemSnowflakeId = snowflakeIdGenerator.nextId();
-
-                orderItemDto.setId(itemSnowflakeId);
-                orderItemDto.setProductId(responseCatalog.getProductId());
-                orderItemDto.setUnitPrice(responseCatalog.getUnitPrice());
-                orderItemDto.setDeliveredKey(keyMap.get(orderItemDto.getProductId()));
-                orderItemDto.setStock(1);
-            });
-
-            int total = orderDto.getOrderItems().stream().mapToInt(OrderItemsDto::getUnitPrice).sum();
-            int payAmount = total - orderDto.getUsedPoint();
-
-            orderDto.setTotalAmount(total);
-            orderDto.setPayAmount(payAmount);
-
+            OrderEntity orderEntity = OrderEntity.create(
+                    orderDto.getId(),
+                    orderDto.getOrderId(),
+                    orderDto.getUserId(),
+                    orderDto.getUsedPoint(),
+                    itemEntities
+            );
+            orderRepository.save(orderEntity);
 
             if (orderDto.getUsedPoint() != null && orderDto.getUsedPoint() > 0) {
                 RequestPoint requestPoint = new RequestPoint();
@@ -193,13 +172,14 @@ public class OrderServiceImpl implements OrderService {
                 internalConnector.withdrawPoint(userId, requestPoint);
             }
 
-            outboxProducer.sendToOutbox(orderDto, "ORDER_CREATED");
 
 
-            return orderDto;
+            return saveOrderToOutbox(orderDto);
         } catch (Exception e) {
             log.error("Order creation failed: {}", e.getMessage());
             throw e;
+        } finally {
+            ShardContextHolder.clear();
         }
     }
 
@@ -230,5 +210,33 @@ public class OrderServiceImpl implements OrderService {
                     return dto;
                 })
                 .toList();
+    }
+
+    @Transactional
+    public OrderDto saveOrderToOutbox(OrderDto orderDto) {
+        outboxProducer.sendToOutbox(orderDto, "ORDER_CREATED");
+        return orderDto;
+    }
+
+    private void setupOrderDetails(OrderDto orderDto, String userId, String orderId, Long snowflakeId,
+                                   Map<String, ResponseCatalog> catalogMap, Map<String, String> keyMap) {
+        orderDto.setId(snowflakeId);
+        orderDto.setOrderId(orderId);
+        orderDto.setUserId(userId);
+        orderDto.setOrderStatus(OrderStatus.CREATED);
+        orderDto.setCreatedAt(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+
+        orderDto.getOrderItems().forEach(itemDto -> {
+            ResponseCatalog catalog = catalogMap.get(itemDto.getProductId());
+            Long itemSnowflakeId = snowflakeIdGenerator.nextId();
+            itemDto.setId(itemSnowflakeId);
+            itemDto.setUnitPrice(catalog.getUnitPrice());
+            itemDto.setDeliveredKey(keyMap.get(itemDto.getProductId()));
+            itemDto.setStock(1);
+        });
+
+        int total = orderDto.getOrderItems().stream().mapToInt(OrderItemsDto::getUnitPrice).sum();
+        orderDto.setTotalAmount(total);
+        orderDto.setPayAmount(total - (orderDto.getUsedPoint() != null ? orderDto.getUsedPoint() : 0));
     }
 }
