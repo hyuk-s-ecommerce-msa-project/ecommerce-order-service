@@ -64,6 +64,8 @@ dependencies {
 	implementation 'io.micrometer:micrometer-registry-prometheus'
 
 	implementation 'com.ecommerce:snowflake:1.0'
+
+	implementation 'io.github.openfeign:feign-hc5'
 }
 
 dependencyManagement {

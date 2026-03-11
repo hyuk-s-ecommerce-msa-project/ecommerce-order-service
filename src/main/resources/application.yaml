@@ -2,15 +2,19 @@ server:
   port: 0
 
 spring:
+  threads:
+    virtual:
+      enabled: true
   datasource:
     shard0:
       url: jdbc:mariadb://localhost:3306/gameinfo_order
     shard1:
       url: jdbc:mariadb://localhost:3306/gameinfo_order2
     hikari:
-      idle-timeout: 600000
-      leak-detection-threshold: 2000
-      maximum-pool-size: 40
+      maximum-pool-size: 20
+      idle-timeout: 30000
+      max-lifetime: 180000
+      connection-timeout: 5000
   application:
     name: order-service
   rabbitmq:
