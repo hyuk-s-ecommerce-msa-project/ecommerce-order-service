@@ -41,107 +41,81 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public OrderDto cancelOrder(String orderId, String userId) {
-        OrderEntity orderEntity = orderRepository.findByOrderId(orderId);
-
-        if (orderEntity == null) {
-            throw new OrderNotFoundException("Cannot find order");
-        }
-
-        if (!orderEntity.getUserId().equals(userId)) {
-            throw new RuntimeException("You do not have permission for this order.");
-        }
-
-        if (orderEntity.getOrderStatus() == OrderStatus.CANCELED || orderEntity.getOrderStatus() == OrderStatus.COMPLETED) {
-            throw new IllegalStateException("Cannot cancel order");
-        }
-
-        orderEntity.cancel();
-
-        List<String> productIds = orderEntity.getOrderItems().stream().map(OrderItemEntity::getProductId).toList();
-
+        setShardContext(userId);
         try {
+            OrderEntity orderEntity = orderRepository.findByOrderId(orderId);
+
+            if (orderEntity == null) {
+                throw new OrderNotFoundException("Cannot find order");
+            }
+
+            if (!orderEntity.getUserId().equals(userId)) {
+                throw new RuntimeException("You do not have permission for this order.");
+            }
+
+            if (orderEntity.getOrderStatus() == OrderStatus.CANCELED || orderEntity.getOrderStatus() == OrderStatus.COMPLETED) {
+                throw new IllegalStateException("Cannot cancel order");
+            }
+
+            orderEntity.cancel();
+
+            List<String> productIds = orderEntity.getOrderItems().stream().map(OrderItemEntity::getProductId).toList();
+
             if (orderEntity.getUsedPoint() > 0) {
                 RequestPoint requestPoint = new RequestPoint();
                 requestPoint.setPoint(orderEntity.getUsedPoint());
-
                 internalConnector.restoreUserPoints(userId, requestPoint);
-
-                log.info("Starting point restoration process, user ID : {}, used point : {}", orderEntity.getUserId(), orderEntity.getUsedPoint());
             }
 
             RequestKey requestKey = new RequestKey(productIds, orderId);
-            List<ResponseKey> responseKey =  internalConnector.revokeGameKeys(requestKey, userId);
-
-            if (responseKey.size() != productIds.size()) {
-                log.warn("Key revocation mismatch: Requested {}, but revoked {}",
-                        productIds.size(), responseKey.size());
-            }
-
-            responseKey.forEach(key ->
-                    log.info("Key revoked - OrderId: {}, ProductId: {}, Key: {}",
-                            orderId, key.getProductId(), key.getGameKey())
-            );
+            internalConnector.revokeGameKeys(requestKey, userId);
 
             OrderDto orderDto = modelMapper.map(orderEntity, OrderDto.class);
-
-            List<OrderItemsDto> itemDtos = orderEntity.getOrderItems().stream()
-                    .map(item -> modelMapper.map(item, OrderItemsDto.class))
-                    .toList();
-
-            orderDto.setOrderItems(itemDtos);
-
-            log.info("orderdto : {}", orderDto);
-
             outboxProducer.sendToOutbox(orderDto, "ORDER_CANCELED");
 
             return orderDto;
-        } catch (Exception e) {
-            log.error("Order cancellation failed. Starting compensation... : {}", e.getMessage());
-            throw e;
+        } finally {
+            ShardContextHolder.clear();
         }
     }
 
     @Override
     @Transactional
     public OrderDto completeOrder(String orderId, String userId) {
-        OrderEntity orderEntity = orderRepository.findByOrderId(orderId);
+        setShardContext(userId);
+        try {
+            OrderEntity orderEntity = orderRepository.findByOrderId(orderId);
 
-        if (orderEntity == null ||!orderEntity.getUserId().equals(userId)) {
-            throw new OrderNotFoundException("Cannot find order or You do not have permission for this order");
+            if (orderEntity == null || !orderEntity.getUserId().equals(userId)) {
+                throw new OrderNotFoundException("Cannot find order or You do not have permission for this order");
+            }
+
+            orderEntity.complete();
+            OrderDto orderDto = modelMapper.map(orderEntity, OrderDto.class);
+            outboxProducer.sendToOutbox(orderDto, "ORDER_COMPLETED");
+
+            return orderDto;
+        } finally {
+            ShardContextHolder.clear();
         }
-
-        orderEntity.complete();
-
-        OrderDto orderDto = modelMapper.map(orderEntity, OrderDto.class);
-
-        outboxProducer.sendToOutbox(orderDto, "ORDER_COMPLETED");
-
-        return orderDto;
     }
 
     @Override
     public OrderDto createOrder(OrderDto orderDto, String userId) {
-        int shardIndex = Math.abs(userId.hashCode() % 2);
-        ShardContextHolder.setShardIndex(shardIndex);
-
-        String datePrefix = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String randomSuffix = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-
-        String orderId = datePrefix + "-ORDER-" + randomSuffix;
-        Long snowflakeId = snowflakeIdGenerator.nextId();
-
-        List<String> productIds = orderDto.getOrderItems().stream().map(OrderItemsDto::getProductId).toList();
-
+        setShardContext(userId);
         try {
-            List<ResponseCatalog> responseCatalogList = internalConnector.getCatalogList(productIds);
+            String datePrefix = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+            String randomSuffix = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+            String orderId = datePrefix + "-ORDER-" + randomSuffix;
+            Long snowflakeId = snowflakeIdGenerator.nextId();
 
+            List<String> productIds = orderDto.getOrderItems().stream().map(OrderItemsDto::getProductId).toList();
+            List<ResponseCatalog> responseCatalogList = internalConnector.getCatalogList(productIds);
             Map<String, ResponseCatalog> catalogMap = responseCatalogList.stream()
                     .collect(Collectors.toMap(ResponseCatalog::getProductId, c -> c));
 
             RequestKey requestKey = new RequestKey(productIds, orderId);
-
             List<ResponseKey> assignedKeys = internalConnector.assignKeys(requestKey, userId);
-
             Map<String, String> keyMap = assignedKeys.stream().collect(Collectors.toMap(ResponseKey::getProductId, ResponseKey::getGameKey));
 
             setupOrderDetails(orderDto, userId, orderId, snowflakeId, catalogMap, keyMap);
@@ -168,16 +142,10 @@ public class OrderServiceImpl implements OrderService {
             if (orderDto.getUsedPoint() != null && orderDto.getUsedPoint() > 0) {
                 RequestPoint requestPoint = new RequestPoint();
                 requestPoint.setPoint(orderDto.getUsedPoint());
-
                 internalConnector.withdrawPoint(userId, requestPoint);
             }
 
-
-
             return saveOrderToOutbox(orderDto);
-        } catch (Exception e) {
-            log.error("Order creation failed: {}", e.getMessage());
-            throw e;
         } finally {
             ShardContextHolder.clear();
         }
@@ -186,30 +154,40 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public OrderDto getOrderByOrderId(String orderId, String userId) {
-        OrderEntity orderEntity = orderRepository.findByOrderId(orderId);
+        setShardContext(userId);
+        try {
+            OrderEntity orderEntity = orderRepository.findByOrderId(orderId);
 
-        if (orderEntity == null || !orderEntity.getUserId().equals(userId)) {
-            throw new OrderNotFoundException("Order not found or access denied");
+            if (orderEntity == null || !orderEntity.getUserId().equals(userId)) {
+                throw new OrderNotFoundException("Order not found or access denied");
+            }
+
+            return modelMapper.map(orderEntity, OrderDto.class);
+        } finally {
+            ShardContextHolder.clear();
         }
-
-        return modelMapper.map(orderEntity, OrderDto.class);
     }
 
     @Override
     public List<OrderDto> getOrdersByUserId(String userId) {
-        List<OrderEntity> orderEntities = orderRepository.findByUserId(userId);
+        setShardContext(userId);
+        try {
+            List<OrderEntity> orderEntities = orderRepository.findByUserId(userId);
 
-        if (orderEntities == null || orderEntities.isEmpty()) {
-            return new ArrayList<>();
+            if (orderEntities == null || orderEntities.isEmpty()) {
+                return new ArrayList<>();
+            }
+
+            return orderEntities.stream()
+                    .map(entity -> {
+                        OrderDto dto = modelMapper.map(entity, OrderDto.class);
+                        dto.setUserId(userId);
+                        return dto;
+                    })
+                    .toList();
+        } finally {
+            ShardContextHolder.clear();
         }
-
-        return orderEntities.stream()
-                .map(entity -> {
-                    OrderDto dto = modelMapper.map(entity, OrderDto.class);
-                    dto.setUserId(userId);
-                    return dto;
-                })
-                .toList();
     }
 
     @Transactional
@@ -238,5 +216,11 @@ public class OrderServiceImpl implements OrderService {
         int total = orderDto.getOrderItems().stream().mapToInt(OrderItemsDto::getUnitPrice).sum();
         orderDto.setTotalAmount(total);
         orderDto.setPayAmount(total - (orderDto.getUsedPoint() != null ? orderDto.getUsedPoint() : 0));
+    }
+
+    private void setShardContext(String userId) {
+        int shardIndex = Math.abs(userId.hashCode() % 2);
+        ShardContextHolder.setShardIndex(shardIndex);
+        log.info("Shard Index set to {} for userId: {}", shardIndex, userId);
     }
 }
