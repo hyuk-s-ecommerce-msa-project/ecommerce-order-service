@@ -10,7 +10,10 @@ import org.springframework.web.bind.annotation.RequestHeader;
 
 import java.util.List;
 
-@FeignClient("key-inventory-service")
+@FeignClient(
+        name = "key-inventory-service",
+        url = "http://key-inventory-service:8085"
+)
 public interface KeyInventoryClient {
     @PostMapping("/key-inventory/assign")
     List<ResponseKey> assignKeys(@RequestBody RequestKey requestKey, @RequestHeader("userId") String userId);

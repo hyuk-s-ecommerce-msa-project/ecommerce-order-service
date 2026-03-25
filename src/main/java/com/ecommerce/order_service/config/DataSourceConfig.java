@@ -32,12 +32,12 @@ public class DataSourceConfig {
 
     @Bean
     public DataSource shard0DataSource() {
-        return createDataSource("jdbc:mariadb://mariadb:3306/gameinfo_order");
+        return createDataSource("jdbc:mariadb://10.0.0.4:3306/gameinfo_order");
     }
 
     @Bean
     public DataSource shard1DataSource() {
-        return createDataSource("jdbc:mariadb://mariadb:3306/gameinfo_order2");
+        return createDataSource("jdbc:mariadb://10.0.0.4:3306/gameinfo_order2");
     }
 
     private DataSource createDataSource(String url) {

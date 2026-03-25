@@ -6,7 +6,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 
-@FeignClient(name = "user-service")
+@FeignClient(
+        name = "user-service",
+        url = "http://user-service:8081"
+)
 public interface UserServiceClient {
     @PostMapping("/point/increase")
     void restorePoints(@RequestHeader("userId") String userId, @RequestBody RequestPoint requestPoint);

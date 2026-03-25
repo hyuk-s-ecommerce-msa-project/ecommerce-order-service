@@ -7,7 +7,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 
 import java.util.List;
 
-@FeignClient(name = "catalog-service")
+@FeignClient(
+        name = "catalog-service",
+        url = "http://catalog-service:8082"
+)
 public interface CatalogServiceClient {
     @PostMapping("/catalog-service/catalogs/queries")
     List<ResponseCatalog> getCatalogList(@RequestBody List<String> productIds);
