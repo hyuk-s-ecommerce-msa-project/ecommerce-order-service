@@ -67,6 +67,12 @@ dependencies {
 	implementation 'io.github.openfeign:feign-hc5'
 
 	implementation 'org.springframework.cloud:spring-cloud-starter-loadbalancer'
+
+	testImplementation "org.testcontainers:testcontainers:1.19.7"
+	testImplementation "org.testcontainers:junit-jupiter:1.19.7"
+	testImplementation "org.testcontainers:mariadb:1.19.7"
+
+	testImplementation 'org.springframework.cloud:spring-cloud-starter-contract-stub-runner'
 }
 
 dependencyManagement {
@@ -77,4 +83,10 @@ dependencyManagement {
 
 tasks.named('test') {
 	useJUnitPlatform()
+}
+
+test {
+	testLogging {
+		showStandardStreams = true
+	}
 }

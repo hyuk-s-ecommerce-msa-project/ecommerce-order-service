@@ -7,6 +7,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.core.env.Environment;
 import org.springframework.jdbc.datasource.LazyConnectionDataSourceProxy;
 
 import javax.sql.DataSource;
@@ -24,6 +25,12 @@ public class DataSourceConfig {
     @Value("${spring.datasource.driver-class-name}")
     private String driverClassName;
 
+    private final Environment env;
+
+    public DataSourceConfig(Environment env) {
+        this.env = env;
+    }
+
     @Bean
     @ConfigurationProperties(prefix = "spring.datasource.hikari")
     public HikariConfig commonHikariConfig() {
@@ -32,12 +39,12 @@ public class DataSourceConfig {
 
     @Bean
     public DataSource shard0DataSource() {
-        return createDataSource("jdbc:mariadb://10.0.0.4:3306/gameinfo_order");
+        return createDataSource(env.getProperty("spring.datasource.shard0.url"));
     }
 
     @Bean
     public DataSource shard1DataSource() {
-        return createDataSource("jdbc:mariadb://10.0.0.4:3306/gameinfo_order2");
+        return createDataSource(env.getProperty("spring.datasource.shard1.url"));
     }
 
     private DataSource createDataSource(String url) {
