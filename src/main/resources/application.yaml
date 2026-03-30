@@ -7,6 +7,8 @@ spring:
       enabled: true
   application:
     name: order-service
+  profiles:
+    active: dev
   cloud:
     config:
       name: gameinfo,order-service

@@ -14,11 +14,11 @@ import com.ecommerce.order_service.vo.RequestPoint;
 import com.ecommerce.order_service.vo.ResponseCatalog;
 import com.ecommerce.order_service.vo.ResponseKey;
 import com.ecommerce.snowflake.util.SnowflakeIdGenerator;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -101,6 +101,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
+    @Transactional
     public OrderDto createOrder(OrderDto orderDto, String userId) {
         setShardContext(userId);
         try {
@@ -145,7 +146,12 @@ public class OrderServiceImpl implements OrderService {
                 internalConnector.withdrawPoint(userId, requestPoint);
             }
 
-            return saveOrderToOutbox(orderDto);
+            outboxProducer.sendToOutbox(orderDto, "ORDER_CREATED");
+
+            return orderDto;
+        } catch (Exception e) {
+            log.error("주문 생성 중 에러 발생", e);
+            throw e;
         } finally {
             ShardContextHolder.clear();
         }
@@ -188,12 +194,6 @@ public class OrderServiceImpl implements OrderService {
         } finally {
             ShardContextHolder.clear();
         }
-    }
-
-    @Transactional
-    public OrderDto saveOrderToOutbox(OrderDto orderDto) {
-        outboxProducer.sendToOutbox(orderDto, "ORDER_CREATED");
-        return orderDto;
     }
 
     private void setupOrderDetails(OrderDto orderDto, String userId, String orderId, Long snowflakeId,
