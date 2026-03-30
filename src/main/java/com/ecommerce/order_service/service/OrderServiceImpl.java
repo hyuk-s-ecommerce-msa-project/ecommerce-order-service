@@ -53,7 +53,7 @@ public class OrderServiceImpl implements OrderService {
                 throw new RuntimeException("You do not have permission for this order.");
             }
 
-            if (orderEntity.getOrderStatus() == OrderStatus.CANCELED || orderEntity.getOrderStatus() == OrderStatus.COMPLETED) {
+            if (orderEntity.getOrderStatus() == OrderStatus.CANCELED) {
                 throw new IllegalStateException("Cannot cancel order");
             }
 
