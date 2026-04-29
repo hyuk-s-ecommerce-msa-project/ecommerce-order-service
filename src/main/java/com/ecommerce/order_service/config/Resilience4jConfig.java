@@ -15,7 +15,7 @@ public class Resilience4jConfig {
     @Bean
     public Customizer<Resilience4JCircuitBreakerFactory> globalCustomConfiguration() {
         CircuitBreakerConfig circuitBreakerConfig = CircuitBreakerConfig.custom()
-                .failureRateThreshold(20)
+                .failureRateThreshold(30)
                 .waitDurationInOpenState(Duration.ofMillis(30000))
                 .slidingWindowType(CircuitBreakerConfig.SlidingWindowType.COUNT_BASED)
                 .slidingWindowSize(100)
